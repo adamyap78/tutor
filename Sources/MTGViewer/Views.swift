@@ -179,18 +179,12 @@ struct SearchField: NSViewRepresentable {
             switch sel {
             case #selector(NSResponder.moveUp(_:)): model.arrow(.up); return true
             case #selector(NSResponder.moveDown(_:)): model.arrow(.down); return true
+            // Plain left/right always navigate; Option/Cmd/Ctrl/Shift variants use other selectors and still edit text.
             case #selector(NSResponder.moveLeft(_:)):
-                let r = textView.selectedRange()
-                if model.handlesHorizontal, r.length == 0, r.location == 0 || model.mode == .detail {
-                    model.arrow(.left); return true
-                }
+                if model.handlesHorizontal { model.arrow(.left); return true }
                 return false
             case #selector(NSResponder.moveRight(_:)):
-                let r = textView.selectedRange()
-                let len = (textView.string as NSString).length
-                if model.handlesHorizontal, r.length == 0, r.location == len || model.mode == .detail {
-                    model.arrow(.right); return true
-                }
+                if model.handlesHorizontal { model.arrow(.right); return true }
                 return false
             case #selector(NSResponder.insertNewline(_:)): model.enter(); return true
             case #selector(NSResponder.cancelOperation(_:)): model.escape(); return true
