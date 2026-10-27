@@ -51,5 +51,8 @@ struct MTGApp: App {
                 Button("Refresh Card Database") { model.refreshData(force: true, silent: false) }.keyboardShortcut("r")
             }
         }
+        Settings {
+            SettingsView().environment(model)
+        }
     }
 }

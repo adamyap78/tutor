@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import SwiftUI
 
 enum LayoutMode: String { case list, grid }
 enum ViewMode { case browse, detail }
@@ -54,8 +55,15 @@ final class AppModel {
         return v > 0 ? v : 2048
     }()
 
+    private(set) var prefs = Preferences.load()
+    private(set) var setCatalog: [SetInfo] = []
+    private(set) var hiddenCount = 0
+
     // MARK: Internals
     @ObservationIgnored private var store: CardStore?
+    @ObservationIgnored private let prefsQueue = DispatchQueue(label: "mtg.prefs", qos: .userInitiated)
+    @ObservationIgnored private var prefsTask: Task<Void, Never>?
+    @ObservationIgnored private var keepID: Int64?
     @ObservationIgnored private var importer = Importer(dataDir: Importer.defaultDataDir())
     @ObservationIgnored private var rowCache: [Int64: CardRow] = [:]
     @ObservationIgnored private var fullCache: CardFull?
@@ -99,8 +107,66 @@ final class AppModel {
         rowCache.removeAll()
         fullCache = nil
         dataState = .ready
-        runSearch()
-        startWarming(after: 5)
+        setCatalog = []
+        if prefs.isStandard {
+            hiddenCount = 0
+            runSearch()
+            startWarming(after: 5)
+        } else {
+            applyPrefs(prune: true)
+        }
+    }
+
+    // MARK: Preferences
+
+    func updatePrefs(_ change: (inout Preferences) -> Void) {
+        var p = prefs
+        change(&p)
+        guard p != prefs else { return }
+        prefs = p
+        p.save()
+        applyPrefs(prune: false)
+    }
+
+    func binding<T>(_ kp: WritableKeyPath<Preferences, T>) -> Binding<T> {
+        Binding(get: { self.prefs[keyPath: kp] }, set: { v in self.updatePrefs { $0[keyPath: kp] = v } })
+    }
+
+    func member(_ kp: WritableKeyPath<Preferences, Set<String>>, _ value: String) -> Binding<Bool> {
+        Binding(get: { self.prefs[keyPath: kp].contains(value) },
+                set: { on in self.updatePrefs { if on { $0[keyPath: kp].insert(value) } else { $0[keyPath: kp].remove(value) } } })
+    }
+
+    /// Recomputes every card's preview printing and visibility off the main thread, then refreshes results.
+    private func applyPrefs(prune: Bool) {
+        guard let store else { return }
+        let p = prefs
+        prefsTask?.cancel()
+        prefsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return }
+            let overlay = await withCheckedContinuation { (c: CheckedContinuation<Overlay?, Never>) in
+                prefsQueue.async { c.resume(returning: store.computeOverlay(p)) }
+            }
+            guard !Task.isCancelled, store === self.store else { return }
+            store.setOverlay(overlay)
+            hiddenCount = overlay?.hidden.count ?? 0
+            rowCache.removeAll()
+            fullCache = nil
+            keepID = current?.id
+            runSearch()
+            startWarming(after: prune ? 5 : 3, prune: prune)
+        }
+    }
+
+    func loadSetCatalog() {
+        guard setCatalog.isEmpty, let store else { return }
+        prefsQueue.async {
+            let sets = store.setCatalog()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { if store === self.store { self.setCatalog = sets } }
+            }
+        }
     }
 
     // MARK: Data refresh
@@ -185,7 +251,8 @@ final class AppModel {
         warnings = out.warnings
         searchMS = out.ms
         if rowCache.count > 4000 { rowCache.removeAll() }
-        selection = 0
+        selection = keepID.flatMap { out.ids.firstIndex(of: $0) } ?? 0
+        keepID = nil
         lastDelta = 1
         resultsVersion += 1
         selectionReset()
@@ -345,7 +412,7 @@ final class AppModel {
 
     /// Downloads `small` images for every card (pinned, ~0.4 GB) and `normal` for the most popular
     /// few thousand, in the background at low priority. Resumable: files already on disk are skipped.
-    func startWarming(after delay: Double = 0) {
+    func startWarming(after delay: Double = 0, prune: Bool = true) {
         warmTask?.cancel()
         warmStatus = nil
         guard warmEnabled, let store else { return }
@@ -375,7 +442,7 @@ final class AppModel {
                     await MainActor.run { self?.warmStatus = "Caching images \(pct)%" }
                 }
             }
-            ImageStore.shared.pruneOrphans(keep: Set(ids))
+            if prune { ImageStore.shared.pruneOrphans(keep: Set(ids)) }
             await MainActor.run { self?.warmStatus = nil }
         }
     }

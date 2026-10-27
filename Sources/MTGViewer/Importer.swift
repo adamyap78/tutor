@@ -116,6 +116,8 @@ final class Importer {
         var released: String
         var usd, usdFoil, usdEtched: Double?
         var hasImage: Bool
+        var setType: String
+        var attrs: Int
     }
 
     private struct Agg {
@@ -135,7 +137,8 @@ final class Importer {
         var pow: Double?, tou: Double?, loy: Double?
         var legal = 0, restricted = 0, banned = 0
         var edhrec: Int?
-        var setCode = "", setName = "", cn = "", released = ""
+        var setCode = "", setName = "", cn = "", released = "", setType = ""
+        var attrs = 0
         var rarity = 0
         var hasImage = false, hasBack = false
         var reserved = false, gameChanger = false, funny = false
@@ -216,13 +219,14 @@ final class Importer {
         CREATE TABLE printings(
           id INTEGER PRIMARY KEY, card_id INT NOT NULL, scry_id TEXT NOT NULL, set_code TEXT NOT NULL,
           set_name TEXT NOT NULL, cn TEXT NOT NULL, rarity INT NOT NULL, released TEXT NOT NULL,
-          usd REAL, usd_foil REAL, usd_etched REAL, has_image INT NOT NULL);
+          usd REAL, usd_foil REAL, usd_etched REAL, has_image INT NOT NULL,
+          set_type TEXT NOT NULL, attrs INT NOT NULL);
         CREATE TABLE detail(card_id INTEGER PRIMARY KEY, json TEXT NOT NULL);
         BEGIN;
         """)
 
         let insCard = try db.prepare("INSERT INTO cards VALUES(\(Array(repeating: "?", count: 33).joined(separator: ",")))")
-        let insPrinting = try db.prepare("INSERT INTO printings VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+        let insPrinting = try db.prepare("INSERT INTO printings VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         let insDetail = try db.prepare("INSERT INTO detail VALUES(?,?)")
         let encoder = JSONEncoder()
 
@@ -245,7 +249,7 @@ final class Importer {
                 insPrinting.bind([
                     .int(printingID), .int(cardID), .text(p.scryID), .text(p.setCode), .text(p.setName), .text(p.cn),
                     .int(Int64(p.rarity)), .text(p.released), opt(p.usd), opt(p.usdFoil), opt(p.usdEtched),
-                    .int(p.hasImage ? 1 : 0),
+                    .int(p.hasImage ? 1 : 0), .text(p.setType), .int(Int64(p.attrs)),
                 ])
                 try insPrinting.run()
             }
@@ -340,7 +344,8 @@ final class Importer {
     private static func merge(_ aggs: inout [String: Agg], _ p: Parsed) {
         let rec = PrintingRec(
             scryID: p.scryID, setCode: p.setCode, setName: p.setName, cn: p.cn, rarity: p.rarity,
-            released: p.released, usd: p.usd, usdFoil: p.usdFoil, usdEtched: p.usdEtched, hasImage: p.hasImage)
+            released: p.released, usd: p.usd, usdFoil: p.usdFoil, usdEtched: p.usdEtched, hasImage: p.hasImage,
+            setType: p.setType, attrs: p.attrs)
         let year = Int(p.released.prefix(4)) ?? 0
         if var a = aggs[p.oracleID] {
             a.printings.append(rec)
@@ -366,12 +371,6 @@ final class Importer {
     }
 
     // MARK: JSON parsing
-
-    /// Printings from these are only shown when a card exists nowhere else. The preview prefers the
-    /// OLDEST remaining printing, i.e. Revised (3ed) onwards.
-    private static let earlySets: Set<String> = [
-        "lea", "leb", "2ed", "arn", "atq", "leg", "drk", "fem", "30a", "cei", "ced", "cedi",
-    ]
 
     private static let skipLayouts: Set<String> = ["token", "double_faced_token", "emblem", "art_series"]
     private static let rarityIndex: [String: Int] = ["common": 0, "uncommon": 1, "rare": 2, "mythic": 3, "special": 4, "bonus": 5]
@@ -453,29 +452,27 @@ final class Importer {
             p.usd = price("usd"); p.usdFoil = price("usd_foil"); p.usdEtched = price("usd_etched")
         }
 
-        // Which printing best represents the card: oldest plain paper English printing from Revised onwards.
-        let promo = o["promo"] as? Bool ?? false
-        let digital = o["digital"] as? Bool ?? false
-        let oversized = o["oversized"] as? Bool ?? false
-        let fullArt = o["full_art"] as? Bool ?? false
-        let borderless = (o["border_color"] as? String) == "borderless"
+        // Which printing best represents the card by default. The same ranking is re-run at runtime
+        // from the stored per-printing attributes when the user changes their art preferences.
+        let games = (o["games"] as? [String]) ?? []
         let effects = (o["frame_effects"] as? [String]) ?? []
         let promoTypes = (o["promo_types"] as? [String]) ?? []
-        let plain = effects.isEmpty && promoTypes.isEmpty && !fullArt && !borderless
-        var bits = 0
-        if p.hasImage { bits |= 1 << 8 }
-        if !earlySets.contains(p.setCode) { bits |= 1 << 7 }
-        if (o["lang"] as? String) == "en" { bits |= 1 << 6 }
-        if setType != "memorabilia" { bits |= 1 << 5 }
-        if !digital { bits |= 1 << 4 }
-        if !promo { bits |= 1 << 3 }
-        if !oversized { bits |= 1 << 2 }
-        if plain { bits |= 1 << 1 }
-        // Oldest wins: invert the digits so that an earlier date compares greater.
-        let inverted = String(p.released.map { c -> Character in
-            c.wholeNumberValue.map { Character(String(9 - $0)) } ?? c
-        })
-        p.repKey = (bits, inverted)
+        let plain = effects.isEmpty && promoTypes.isEmpty && !(o["full_art"] as? Bool ?? false)
+            && (o["border_color"] as? String) != "borderless"
+        var attrs = 0
+        if (o["lang"] as? String) == "en" { attrs |= PrintingAttr.english }
+        if o["digital"] as? Bool ?? false { attrs |= PrintingAttr.digital }
+        if o["promo"] as? Bool ?? false { attrs |= PrintingAttr.promo }
+        if o["oversized"] as? Bool ?? false { attrs |= PrintingAttr.oversized }
+        if plain { attrs |= PrintingAttr.plain }
+        if games.contains("paper") { attrs |= PrintingAttr.paper }
+        if games.contains("mtgo") { attrs |= PrintingAttr.mtgo }
+        if games.contains("arena") { attrs |= PrintingAttr.arena }
+        p.setType = setType
+        p.attrs = attrs
+        p.repKey = Representative.key(
+            PrintingMeta(setCode: p.setCode, setType: setType, released: p.released, attrs: attrs, hasImage: p.hasImage),
+            ArtPreferences())
         return p
     }
 }
