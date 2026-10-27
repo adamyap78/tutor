@@ -94,6 +94,7 @@ struct MainView: View {
 
 struct SearchBar: View {
     @Environment(AppModel.self) private var model
+    @StateObject private var help = HelpState()
     static let height: CGFloat = 44
     static let bottomInset: CGFloat = 16
     static let clearance: CGFloat = bottomInset + height + 14
@@ -110,18 +111,87 @@ struct SearchBar: View {
                     model.escape()
                     model.focusSearch()
                 } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 20)).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Clear (Esc)")
             }
+            Button {
+                help.shown = true
+            } label: {
+                Image(systemName: "questionmark.circle").font(.system(size: 20)).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Search syntax")
         }
+        .sheet(isPresented: $help.shown, onDismiss: { model.focusSearch() }) { SearchHelpView() }
         .padding(.horizontal, 18)
         .frame(height: Self.height)
         .modifier(GlassBar())
         .shadow(color: .black.opacity(0.18), radius: 14, y: 5)
         .padding(.horizontal, 34)
         .padding(.bottom, Self.bottomInset)
+    }
+}
+
+final class HelpState: ObservableObject { @Published var shown = false }
+
+struct SearchHelpView: View {
+    @Environment(\.dismiss) private var dismiss
+    private let sections: [(String, [(String, String)])] = [
+        ("Text", [("lightning bolt", "Name contains words"), ("o:draw", "Oracle text (o:\"draw a card\")"),
+                  ("t:creature", "Type line (t:legendary t:elf)"), ("kw:flying", "Keyword ability")]),
+        ("Colors & mana", [("c:rg", "Card colors"), ("id<=wu", "Color identity (id:bg)"), ("m:rr", "Mana cost contains"),
+                           ("produces:g", "Produces mana")]),
+        ("Numbers", [("mv<=3", "Mana value (also cmc)"), ("pow>=5", "Power (tou, loy likewise)"), ("usd<1", "Price in USD"),
+                     ("year>=2020", "Release year")]),
+        ("Sets & rarity", [("s:mh3", "Set code"), ("r:mythic", "Rarity (r>=rare)"), ("cn:123", "Collector number")]),
+        ("Formats & flags", [("f:modern", "Legal in format"), ("banned:legacy", "Banned in format"), ("is:… / not:…", "Card flags"),
+                             ("layout:split", "Card layout")]),
+        ("Combining", [("a b", "Both terms (AND)"), ("a or b", "Either term"), ("-t:creature", "Negate a term"),
+                       ("(c:r or c:g) t:creature", "Group with parentheses")]),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Search syntax").font(.title2.weight(.semibold))
+                Spacer()
+                Text("Operators  :  =  !=  <  <=  >  >=").font(.caption).foregroundStyle(.tertiary)
+            }
+            HStack(alignment: .top, spacing: 36) {
+                column(Array(sections[0..<3]))
+                column(Array(sections[3..<6]))
+            }
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction).controlSize(.large)
+            }
+        }
+        .padding(28)
+        .frame(width: 820)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func column(_ secs: [(String, [(String, String)])]) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ForEach(secs, id: \.0) { sec in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(sec.0).font(.subheadline.weight(.semibold))
+                    ForEach(sec.1, id: \.0) { item in
+                        HStack(spacing: 10) {
+                            Text(item.0)
+                                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                                .frame(width: 150, alignment: .leading)
+                            Text(item.1).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 }
 
@@ -180,7 +250,7 @@ struct SearchField: NSViewRepresentable {
         f.focusRingType = .none
         f.font = .systemFont(ofSize: 17, weight: .regular)
         f.placeholderAttributedString = NSAttributedString(
-            string: "Search cards — name, or  t:creature  c:r  mv<=3  f:modern  o:draw",
+            string: "Search cards",
             attributes: [.font: NSFont.systemFont(ofSize: 17, weight: .regular), .foregroundColor: NSColor.tertiaryLabelColor])
         f.cell?.isScrollable = true
         f.cell?.wraps = false
