@@ -336,14 +336,16 @@ struct ResultGrid: View {
     }
 }
 
-struct FavoriteStar: View {
+/// A small white dot: filled when favourited, a faint ring when not.
+struct FavoriteDot: View {
     let on: Bool
-    var size: CGFloat = 12
+    var size: CGFloat = 6
 
     var body: some View {
-        Image(systemName: on ? "star.fill" : "star")
-            .font(.system(size: size, weight: .medium))
-            .foregroundStyle(on ? Color.white : Color.primary.opacity(0.55))
+        Circle()
+            .fill(on ? Color.white : Color.clear)
+            .overlay(Circle().strokeBorder(Color.primary.opacity(on ? 0 : 0.5), lineWidth: 1))
+            .frame(width: size, height: size)
             .shadow(color: .black.opacity(on ? 0.5 : 0), radius: 1.5, y: 0.5)
     }
 }
@@ -358,7 +360,7 @@ struct FavoriteButton: View {
             model.toggleFavorite()
             model.focusSearch()
         } label: {
-            FavoriteStar(on: on, size: 11)
+            FavoriteDot(on: on, size: 8)
                 .frame(width: 24, height: 24)
                 .background(on ? AnyShapeStyle(Color.black.opacity(0.35)) : AnyShapeStyle(.regularMaterial), in: Circle())
                 .overlay(Circle().strokeBorder(.white.opacity(on ? 0.25 : 0.12), lineWidth: 0.5))
@@ -384,8 +386,8 @@ struct GridCell: View {
                     .strokeBorder(Color.accentColor, lineWidth: selected ? 3 : 0)
                     .padding(-2)
             )
-            .overlay(alignment: .topTrailing) {
-                if model.isFavorite(row) { FavoriteStar(on: true, size: max(11, width * 0.09)).padding(width * 0.06) }
+            .overlay(alignment: .bottomLeading) {
+                if model.isFavorite(row) { FavoriteDot(on: true, size: max(5, width * 0.04)).opacity(0.8).padding(width * 0.06) }
             }
             .scaleEffect(selected ? 1.02 : 1)
     }
@@ -561,6 +563,7 @@ struct PreviewPane: View {
 
 /// Edition badge and price of the printing being shown, overlaid on the card.
 struct CardBadges: View {
+    @Environment(AppModel.self) private var model
     let full: CardFull
     let printing: Printing
 
@@ -578,13 +581,14 @@ struct CardBadges: View {
                 .background(.regularMaterial, in: Capsule())
                 .help(printing.setName)
                 Spacer(minLength: 4)
-                if let usd = printing.usd ?? printing.usdFoil ?? printing.usdEtched {
-                    let finish = printing.usd != nil ? "Nonfoil" : printing.usdFoil != nil ? "Foil" : "Etched"
-                    Text(usd.usdString)
+                if let price = model.displayPrice(printing) {
+                    Text(price.usd.usdString)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.regularMaterial, in: Capsule())
-                        .help("\(finish) price in USD for \(printing.setName) (\(printing.setCode.uppercased()))\nSource: Scryfall bulk data, sourced from TCGplayer market prices\nSnapshot from the last import; may be out of date")
+                        .help("\(price.finish) price in USD for \(printing.setName) (\(printing.setCode.uppercased()))\n"
+                              + (price.live ? "Live from Scryfall (TCGplayer market price)"
+                                            : "Scryfall bulk data (TCGplayer market price)\nSnapshot" + (model.priceAge.map { ", updated \($0)" } ?? "") + "; refreshing…"))
                 }
             }
             .foregroundStyle(.primary)

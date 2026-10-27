@@ -57,6 +57,8 @@ final class AppModel {
     private(set) var setCatalog: [SetInfo] = []
     private(set) var hiddenCount = 0
     private(set) var favorites = Set(UserDefaults.standard.stringArray(forKey: "favorites") ?? [])
+    /// Fresh prices fetched for printings the user has looked at, keyed by Scryfall ID. Overrides the DB snapshot.
+    private(set) var livePrices: [String: LivePrice] = [:]
 
     // MARK: Internals
     @ObservationIgnored private var store: CardStore?
@@ -76,12 +78,16 @@ final class AppModel {
     @ObservationIgnored private var importing = false
     @ObservationIgnored private var warmTask: Task<Void, Never>?
     @ObservationIgnored private var lastDelta = 1
+    @ObservationIgnored private var priceTask: Task<Void, Never>?
 
     // MARK: Startup
 
     func start() {
         NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.focusSearch() }
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { if self?.dataState == .ready { self?.scheduleUpdateCheck(after: 3) } }
         }
         ImageStore.shared.trimDisk()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
@@ -97,13 +103,7 @@ final class AppModel {
         }
         if let s = try? CardStore(path: importer.dbURL.path), s.cardCount > 0 {
             install(s)
-            let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
-            if Date().timeIntervalSince1970 - last > 24 * 3600 {
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    self.refreshData(force: false, silent: true)
-                }
-            }
+            scheduleUpdateCheck(after: 3)
         } else {
             dataState = .needsData
             refreshData(force: true, silent: false)
@@ -183,6 +183,18 @@ final class AppModel {
     }
 
     // MARK: Data refresh
+
+    /// The bulk file is ~80 MB, so only look for a new one when the last check is over a week old.
+    private static let updateInterval: TimeInterval = 7 * 24 * 3600
+
+    private func scheduleUpdateCheck(after seconds: Double) {
+        let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
+        guard Date().timeIntervalSince1970 - last > Self.updateInterval else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            self.refreshData(force: false, silent: true)
+        }
+    }
 
     func refreshData(force: Bool, silent: Bool) {
         guard !importing else { return }
@@ -280,6 +292,7 @@ final class AppModel {
         printingIndex = nil
         fullCache = nil
         schedulePrefetch()
+        schedulePriceRefresh()
     }
 
     // MARK: Accessors for views
@@ -311,6 +324,29 @@ final class AppModel {
     }
 
     var selectedPrintingIndex: Int { printingIndex ?? full?.repIndex ?? 0 }
+
+    /// Price to show for a printing: the freshly fetched one if we have it, else the import snapshot.
+    func displayPrice(_ p: Printing) -> (usd: Double, finish: String, live: Bool)? {
+        let live = livePrices[p.scryID]
+        let (a, b, c) = live.map { ($0.usd, $0.usdFoil, $0.usdEtched) } ?? (p.usd, p.usdFoil, p.usdEtched)
+        if let v = a { return (v, "Nonfoil", live != nil) }
+        if let v = b { return (v, "Foil", live != nil) }
+        if let v = c { return (v, "Etched", live != nil) }
+        return nil
+    }
+
+    /// After a short dwell on a printing, fetch its current price from Scryfall in the background.
+    private func schedulePriceRefresh() {
+        priceTask?.cancel()
+        priceTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled, let p = printing else { return }
+            if let lp = livePrices[p.scryID], Date().timeIntervalSince(lp.fetched) < 15 * 60 { return }
+            guard let lp = await LivePrice.fetch(scryID: p.scryID) else { return }
+            if livePrices.count > 500 { livePrices.removeAll() }
+            livePrices[p.scryID] = lp
+        }
+    }
 
     var priceAge: String? {
         guard let d = bulkDate else { return nil }
@@ -359,9 +395,10 @@ final class AppModel {
         guard let f = full, f.printings.count > 1 else { return }
         printingIndex = min(max(selectedPrintingIndex + d, 0), f.printings.count - 1)
         face = 0
+        schedulePriceRefresh()
     }
 
-    func selectPrinting(_ i: Int) { printingIndex = i; face = 0 }
+    func selectPrinting(_ i: Int) { printingIndex = i; face = 0; schedulePriceRefresh() }
 
     func enter() {
         if mode == .detail { mode = .browse } else if current != nil { mode = .detail }

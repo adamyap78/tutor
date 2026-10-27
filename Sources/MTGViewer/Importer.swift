@@ -76,7 +76,7 @@ final class Importer {
 
     // MARK: Network
 
-    private static func request(_ url: URL) -> URLRequest {
+    static func request(_ url: URL) -> URLRequest {
         var r = URLRequest(url: url)
         r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         r.setValue("application/json;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")

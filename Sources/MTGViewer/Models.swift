@@ -179,6 +179,24 @@ struct Printing: Identifiable, Hashable {
     let hasImage: Bool
 }
 
+/// Current prices for one printing, fetched on demand from Scryfall's card endpoint.
+struct LivePrice {
+    let usd: Double?
+    let usdFoil: Double?
+    let usdEtched: Double?
+    let fetched: Date
+
+    static func fetch(scryID: String) async -> LivePrice? {
+        guard let url = URL(string: "https://api.scryfall.com/cards/\(scryID)"),
+              let (data, resp) = try? await URLSession.shared.data(for: Importer.request(url)),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let prices = o["prices"] as? [String: Any] else { return nil }
+        func price(_ k: String) -> Double? { (prices[k] as? String).flatMap(Double.init) }
+        return LivePrice(usd: price("usd"), usdFoil: price("usd_foil"), usdEtched: price("usd_etched"), fetched: Date())
+    }
+}
+
 struct CardFull {
     let row: CardRow
     let oracleID: String
