@@ -607,11 +607,14 @@ struct DetailInfo: View {
                 }
             }
 
+            Spacer(minLength: 0)
+
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
                 ForEach(Formats.detailFormats, id: \.self) { fmt in
                     LegalityChip(format: fmt, status: full.status(fmt))
                 }
             }
+            .padding(.bottom, 14)
         }
     }
 }
