@@ -2,7 +2,7 @@
 
 Instant, offline card search for Magic: The Gathering, for macOS. Type a Scryfall-style query and the results update as you type, from a local SQLite database, with no network call on the search path.
 
-![Tutor showing a search for red creatures](docs/screenshot.jpg)
+![Tutor showing a search for UR dragons](docs/screenshot.jpg)
 
 ## Features
 
