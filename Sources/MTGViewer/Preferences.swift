@@ -54,8 +54,8 @@ enum Cutoff: String, Codable, CaseIterable, Identifiable {
 }
 
 struct ArtPreferences: Codable, Equatable {
-    var newestFirst = false
-    var cutoff: Cutoff = .revised
+    var newestFirst = true
+    var cutoff: Cutoff = .none
     var preferEnglish = true
     var preferPaper = true
     var preferNonPromo = true
@@ -72,11 +72,15 @@ struct ExclusionPreferences: Codable, Equatable {
     var sets: Set<String> = []
 
     var isEmpty: Bool { self == ExclusionPreferences() }
+
+    /// Digital-only printings, joke sets and memorabilia stay out of the way.
+    static let recommended = ExclusionPreferences(
+        mtgoOnly: true, arenaOnly: true, setTypes: ["funny", "memorabilia"])
 }
 
 struct Preferences: Codable, Equatable {
     var art = ArtPreferences()
-    var exclude = ExclusionPreferences()
+    var exclude = ExclusionPreferences.recommended
 
     static let standard = Preferences()
     var isStandard: Bool { self == .standard }

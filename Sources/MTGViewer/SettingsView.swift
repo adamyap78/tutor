@@ -129,8 +129,12 @@ private struct ExclusionSettings: View {
             }
 
             Section {
-                Button("Clear All Exclusions") { model.updatePrefs { $0.exclude = ExclusionPreferences() } }
-                    .disabled(model.prefs.exclude.isEmpty)
+                HStack {
+                    Button("Restore Recommended") { model.updatePrefs { $0.exclude = .recommended } }
+                        .disabled(model.prefs.exclude == .recommended)
+                    Button("Clear All Exclusions") { model.updatePrefs { $0.exclude = ExclusionPreferences() } }
+                        .disabled(model.prefs.exclude.isEmpty)
+                }
             }
         }
         .formStyle(.grouped)
