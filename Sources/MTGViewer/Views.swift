@@ -61,31 +61,29 @@ struct MainView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Kept alive (zero height) while inspecting so the field still receives the keyboard.
-            SearchBar()
-                .frame(height: model.mode == .detail ? 0 : nil)
-                .clipped()
-                .opacity(model.mode == .detail ? 0 : 1)
-                .allowsHitTesting(model.mode != .detail)
-            if model.mode == .detail {
-                Color.clear.frame(height: 30)
-            } else {
-                Divider()
-            }
-            if model.mode == .detail {
-                DetailView()
-            } else {
-                HStack(spacing: 0) {
-                    Group {
-                        if model.count == 0 { EmptyResults() }
-                        else if model.layout == .list { ResultList() }
-                        else { ResultGrid() }
+            ZStack(alignment: .bottom) {
+                if model.mode == .detail {
+                    DetailView().padding(.top, 30)
+                } else {
+                    HStack(spacing: 0) {
+                        Group {
+                            if model.count == 0 { EmptyResults() }
+                            else if model.layout == .list { ResultList() }
+                            else { ResultGrid() }
+                        }
+                        .frame(minWidth: 320, maxWidth: .infinity)
+                        Divider()
+                        PreviewPane()
+                            .frame(width: PreviewPane.width)
                     }
-                    .frame(minWidth: 320, maxWidth: .infinity)
-                    Divider()
-                    PreviewPane()
-                        .frame(width: PreviewPane.width)
                 }
+                // Floats over the results column only; kept alive (hidden) while inspecting so the field still receives the keyboard.
+                SearchBar()
+                    .padding(.trailing, model.mode == .detail ? 0 : PreviewPane.width + 1)
+                    .frame(height: model.mode == .detail ? 0 : nil)
+                    .clipped()
+                    .opacity(model.mode == .detail ? 0 : 1)
+                    .allowsHitTesting(model.mode != .detail)
             }
             Divider()
             FooterBar()
@@ -97,20 +95,23 @@ struct MainView: View {
 
 struct SearchBar: View {
     @Environment(AppModel.self) private var model
+    static let height: CGFloat = 44
+    static let bottomInset: CGFloat = 16
+    static let clearance: CGFloat = bottomInset + height + 14
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
             SearchField(model: model)
-                .frame(height: 34)
+                .frame(height: 28)
             if !model.query.isEmpty {
                 Button {
                     model.escape()
                     model.focusSearch()
                 } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Clear (Esc)")
@@ -120,21 +121,54 @@ struct SearchBar: View {
                 model.focusSearch()
             } label: {
                 Image(systemName: model.layout == .list ? "square.grid.2x2" : "list.bullet")
-                    .font(.system(size: 15))
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 26, height: 26)
             }
             .buttonStyle(.plain)
             .help(model.layout == .list ? "Show image grid (⌘G)" : "Show compact list (⌘G)")
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 34)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 18)
+        .frame(height: Self.height)
+        .modifier(GlassBar())
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 5)
+        .padding(.horizontal, 18)
+        .padding(.bottom, Self.bottomInset)
+    }
+}
+
+struct GlassBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+        }
+    }
+}
+
+final class CenteredCell: NSTextFieldCell {
+    private func centered(_ r: NSRect) -> NSRect {
+        let h = cellSize(forBounds: r).height
+        var o = r
+        o.origin.y += (r.height - h) / 2
+        o.size.height = h
+        return o
+    }
+    override func drawingRect(forBounds r: NSRect) -> NSRect { centered(super.drawingRect(forBounds: r)) }
+    override func select(withFrame r: NSRect, in v: NSView, editor: NSText, delegate d: Any?, start: Int, length: Int) {
+        super.select(withFrame: centered(r), in: v, editor: editor, delegate: d, start: start, length: length)
+    }
+    override func edit(withFrame r: NSRect, in v: NSView, editor: NSText, delegate d: Any?, event: NSEvent?) {
+        super.edit(withFrame: centered(r), in: v, editor: editor, delegate: d, event: event)
     }
 }
 
 final class KeyField: NSTextField {
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 34) }
+    override class var cellClass: AnyClass? { get { CenteredCell.self } set {} }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 28) }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -156,10 +190,10 @@ struct SearchField: NSViewRepresentable {
         f.isBordered = false
         f.drawsBackground = false
         f.focusRingType = .none
-        f.font = .systemFont(ofSize: 24, weight: .light)
+        f.font = .systemFont(ofSize: 17, weight: .regular)
         f.placeholderAttributedString = NSAttributedString(
             string: "Search cards — name, or  t:creature  c:r  mv<=3  f:modern  o:draw",
-            attributes: [.font: NSFont.systemFont(ofSize: 22, weight: .light), .foregroundColor: NSColor.tertiaryLabelColor])
+            attributes: [.font: NSFont.systemFont(ofSize: 17, weight: .regular), .foregroundColor: NSColor.tertiaryLabelColor])
         f.cell?.isScrollable = true
         f.cell?.wraps = false
         f.lineBreakMode = .byClipping
@@ -263,6 +297,8 @@ struct ResultList: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .contentMargins(.top, 34, for: .scrollContent)
+            .contentMargins(.bottom, SearchBar.clearance, for: .scrollContent)
             .environment(\.defaultMinListRowHeight, 46)
             .onChange(of: model.selection) { _, new in proxy.scrollTo(new) }
             .onChange(of: model.resultsVersion) { _, _ in proxy.scrollTo(model.selection, anchor: .top) }
@@ -295,6 +331,8 @@ struct ResultGrid: View {
                     }
                     .padding(pad)
                 }
+                .contentMargins(.top, 30 - pad, for: .scrollContent)
+                .contentMargins(.bottom, SearchBar.clearance - pad, for: .scrollContent)
                 .onChange(of: model.selection) { _, new in proxy.scrollTo(new) }
                 .onChange(of: model.resultsVersion) { _, _ in proxy.scrollTo(model.selection, anchor: .top) }
             }
