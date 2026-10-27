@@ -66,7 +66,7 @@ struct MainView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottom) {
                 if model.mode == .detail {
-                    DetailView().padding(.top, 18)
+                    DetailView()
                 } else {
                     HStack(spacing: 0) {
                         Group {
@@ -529,13 +529,14 @@ struct LegalityChip: View {
     let status: LegalStatus
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(Style.legality(status)).frame(width: 6, height: 6)
-            Text("\(Formats.titles[format] ?? format) · \(status.label)")
-                .font(.system(size: 11, weight: .medium))
-        }
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(Style.legality(status).opacity(0.14), in: Capsule())
+        Text(Formats.titles[format] ?? format)
+            .font(.system(size: 11, weight: .medium))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 3)
+            .background(Style.legality(status).opacity(status == .notLegal ? 0.12 : 0.28), in: Capsule())
+            .foregroundStyle(status == .notLegal ? .secondary : .primary)
+            .help("\(Formats.titles[format] ?? format): \(status.label)")
     }
 }
 
@@ -547,26 +548,29 @@ struct DetailView: View {
     var body: some View {
         if let f = model.full, let p = model.printing {
             HStack(alignment: .top, spacing: 40) {
-                ZStack(alignment: .bottom) {
-                    CardImageView(scryID: p.scryID, hasImage: p.hasImage, face: model.face, size: .large,
-                                  title: f.visibleFaces(face: model.face).first?.name ?? f.row.name,
-                                  subtitle: f.visibleFaces(face: model.face).first?.typeLine ?? "",
-                                  text: f.visibleFaces(face: model.face).first?.oracleText ?? "")
-                    if f.row.hasBack {
-                        Text("⇥  flip card")
-                            .font(.system(size: 11, weight: .medium))
-                            .padding(.horizontal, 10).padding(.vertical, 4)
-                            .background(.regularMaterial, in: Capsule())
-                            .foregroundStyle(.secondary)
-                            .offset(y: 4)
+                CardImageView(scryID: p.scryID, hasImage: p.hasImage, face: model.face, size: .large,
+                              title: f.visibleFaces(face: model.face).first?.name ?? f.row.name,
+                              subtitle: f.visibleFaces(face: model.face).first?.typeLine ?? "",
+                              text: f.visibleFaces(face: model.face).first?.oracleText ?? "")
+                    .overlay(alignment: .bottom) { CardBadges(full: f, printing: p) }
+                    .overlay(alignment: .topTrailing) {
+                        if f.row.hasBack {
+                            Text("⇥ flip")
+                                .font(.system(size: 10, weight: .medium))
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(.regularMaterial, in: Capsule())
+                                .foregroundStyle(.secondary)
+                                .padding(8)
+                        }
                     }
-                }
-                .frame(minWidth: 320, maxWidth: 520)
-                .padding(.vertical, 24)
+                // Same size and vertical position as the card in the grid view's preview pane.
+                .frame(width: PreviewPane.width - 40)
+                .frame(maxHeight: .infinity)
+                .padding(.vertical, 18)
 
                 DetailInfo(full: f, printing: p)
                     .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(.vertical, 24)
+                    .padding(.vertical, 18)
                     .padding(.trailing, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -603,71 +607,11 @@ struct DetailInfo: View {
                 }
             }
 
-            section("Legality") {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
-                    ForEach(Formats.detailFormats, id: \.self) { fmt in
-                        LegalityChip(format: fmt, status: full.status(fmt))
-                    }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                ForEach(Formats.detailFormats, id: \.self) { fmt in
+                    LegalityChip(format: fmt, status: full.status(fmt))
                 }
             }
-
-            section("Price") {
-                PriceBlock(printing: printing, age: model.priceAge)
-            }
-
-            section("Edition") {
-                HStack(spacing: 8) {
-                    Circle().fill(Style.rarity(printing.rarity)).frame(width: 8, height: 8)
-                    Text(printing.setName).font(.system(size: 13)).lineLimit(1)
-                    Text("\(printing.setCode.uppercased()) #\(printing.collector)")
-                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.tertiary)
-                    Spacer(minLength: 4)
-                    Text("\(model.selectedPrintingIndex + 1) of \(full.printings.count)")
-                        .font(.system(size: 11)).foregroundStyle(.tertiary)
-                }
-            }
-
-            HStack {
-                Button { model.openScryfall() } label: { Label("View on Scryfall", systemImage: "arrow.up.right.square") }
-                    .buttonStyle(.link)
-                Spacer()
-                if let e = full.edhrec { Text("EDHREC rank \(e.formatted())").font(.caption).foregroundStyle(.tertiary) }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func section<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased()).font(.system(size: 10.5, weight: .semibold)).tracking(0.8).foregroundStyle(.tertiary)
-            content()
-        }
-    }
-}
-
-struct PriceBlock: View {
-    let printing: Printing
-    let age: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if printing.usd == nil && printing.usdFoil == nil && printing.usdEtched == nil {
-                Text("No price available for this printing").foregroundStyle(.secondary)
-            } else {
-                HStack(spacing: 22) {
-                    if let u = printing.usd { price("Regular", u) }
-                    if let u = printing.usdFoil { price("Foil", u) }
-                    if let u = printing.usdEtched { price("Etched", u) }
-                }
-            }
-            if let age { Text("Scryfall market data · updated \(age)").font(.caption).foregroundStyle(.tertiary) }
-        }
-    }
-
-    private func price(_ label: String, _ v: Double) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(v.usdString).font(.system(size: 20, weight: .semibold, design: .rounded))
-            Text(label).font(.caption).foregroundStyle(.secondary)
         }
     }
 }
