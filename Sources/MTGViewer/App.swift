@@ -16,7 +16,7 @@ struct MTGApp: App {
         WindowGroup("MTG Viewer") {
             RootView()
                 .environment(model)
-                .frame(minWidth: 900, minHeight: 640)
+                .frame(minWidth: 900, minHeight: 510)
                 .onAppear { model.start() }
         }
         .windowStyle(.hiddenTitleBar)

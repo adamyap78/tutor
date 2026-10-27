@@ -86,8 +86,6 @@ struct MainView: View {
                     .opacity(model.mode == .detail ? 0 : 1)
                     .allowsHitTesting(model.mode != .detail)
             }
-            Divider()
-            FooterBar()
         }
     }
 }
@@ -675,59 +673,6 @@ struct PriceBlock: View {
 }
 
 // MARK: - Footer
-
-struct Hint: View {
-    let key: String
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(key)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .padding(.horizontal, 4).padding(.vertical, 1)
-                .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4))
-            Text(label).font(.system(size: 11))
-        }
-        .foregroundStyle(.tertiary)
-    }
-}
-
-struct FooterBar: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        HStack(spacing: 14) {
-            if let t = model.toast {
-                Text(t).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-            } else {
-                Text("\(model.count.formatted()) \(model.count == 1 ? "card" : "cards")" +
-                     (model.warnings.isEmpty ? "" : " · \(model.warnings[0])"))
-                    .font(.system(size: 11)).foregroundStyle(.tertiary)
-            }
-            Spacer()
-            if model.mode == .detail {
-                Hint(key: "↑↓", label: "Printing")
-                Hint(key: "←→", label: "Card")
-                Hint(key: "⇥", label: "Flip")
-                Hint(key: "⌘O", label: "Scryfall")
-                Hint(key: "⎋", label: "Back")
-            } else {
-                Hint(key: "↑↓", label: "Navigate")
-                Hint(key: "⏎", label: "Inspect")
-                Hint(key: "⌘C", label: "Copy name")
-                Hint(key: "⌘I", label: model.showText ? "Hide text" : "Card text")
-                Hint(key: "⎋", label: "Clear")
-            }
-            if let s = model.updateStatus ?? model.warmStatus {
-                Text(s).font(.system(size: 11)).foregroundStyle(.secondary)
-            } else {
-                Hint(key: "⌘R", label: "Refresh data")
-            }
-        }
-        .padding(.horizontal, 20)
-        .frame(height: 30)
-    }
-}
 
 // MARK: - First run
 
