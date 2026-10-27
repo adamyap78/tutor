@@ -37,6 +37,7 @@ final class AppModel {
     private(set) var face = 0
     private(set) var printingIndex: Int?
     var gridColumns = 4
+    private(set) var showText = UserDefaults.standard.bool(forKey: "showText")
     private(set) var layout: LayoutMode = LayoutMode(rawValue: UserDefaults.standard.string(forKey: "layout") ?? "") ?? .list
 
     private(set) var dataState: DataState = .loading
@@ -302,6 +303,11 @@ final class AppModel {
     func flip() {
         guard let f = full, f.row.hasBack else { return }
         face = face == 0 ? 1 : 0
+    }
+
+    func toggleText() {
+        showText.toggle()
+        UserDefaults.standard.set(showText, forKey: "showText")
     }
 
     func toggleLayout() {

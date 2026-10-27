@@ -35,6 +35,7 @@ struct MTGApp: App {
                 Button("Find") { model.focusSearch(selectAll: true) }.keyboardShortcut("f")
                 Divider()
                 Button("Toggle Grid / List") { model.toggleLayout() }.keyboardShortcut("g")
+                Button("Toggle Card Text") { model.toggleText() }.keyboardShortcut("i")
                 Button("Flip Card") { model.flip() }.keyboardShortcut("t")
                 Button("Next Printing") { model.stepPrinting(1) }.keyboardShortcut("]")
                 Button("Previous Printing") { model.stepPrinting(-1) }.keyboardShortcut("[")
