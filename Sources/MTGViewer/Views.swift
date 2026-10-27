@@ -72,7 +72,6 @@ struct MainView: View {
                             else { ResultGrid() }
                         }
                         .frame(minWidth: 320, maxWidth: .infinity)
-                        Divider()
                         PreviewPane()
                             .frame(width: PreviewPane.width)
                     }
@@ -132,7 +131,7 @@ struct SearchBar: View {
         .frame(height: Self.height)
         .modifier(GlassBar())
         .shadow(color: .black.opacity(0.18), radius: 14, y: 5)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 34)
         .padding(.bottom, Self.bottomInset)
     }
 }
@@ -296,6 +295,7 @@ struct ResultList: View {
                 }
             }
             .listStyle(.plain)
+            .scrollIndicators(.hidden)
             .scrollContentBackground(.hidden)
             .contentMargins(.top, 34, for: .scrollContent)
             .contentMargins(.bottom, SearchBar.clearance, for: .scrollContent)
@@ -318,7 +318,7 @@ struct ResultGrid: View {
             let cols = max(1, Int((avail + spacing) / (minItem + spacing)))
             let w = (avail - spacing * CGFloat(cols - 1)) / CGFloat(cols)
             ScrollViewReader { proxy in
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(w), spacing: spacing), count: cols), spacing: spacing) {
                         ForEach(0..<model.count, id: \.self) { i in
                             if let row = model.row(at: i) {
