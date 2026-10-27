@@ -35,7 +35,7 @@ struct RootView: View {
         ZStack {
             Color(nsColor: .windowBackgroundColor).ignoresSafeArea()
             switch model.dataState {
-            case .ready: MainView()
+            case .ready: MainView().ignoresSafeArea(.container, edges: .top)
             case .needsData: OnboardingView()
             case .loading: EmptyView()
             }
@@ -50,6 +50,9 @@ struct WindowConfigurator: NSViewRepresentable {
         DispatchQueue.main.async {
             v.window?.isMovableByWindowBackground = true
             v.window?.titlebarAppearsTransparent = true
+            for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                v.window?.standardWindowButton(b)?.isHidden = true
+            }
         }
         return v
     }
@@ -63,7 +66,7 @@ struct MainView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .bottom) {
                 if model.mode == .detail {
-                    DetailView().padding(.top, 30)
+                    DetailView().padding(.top, 18)
                 } else {
                     HStack(spacing: 0) {
                         Group {
@@ -254,7 +257,7 @@ struct ResultGrid: View {
                     }
                     .padding(pad)
                 }
-                .contentMargins(.top, 30 - pad, for: .scrollContent)
+                .contentMargins(.top, 0, for: .scrollContent)
                 .contentMargins(.bottom, SearchBar.clearance - pad, for: .scrollContent)
                 .onChange(of: model.selection) { _, new in proxy.scrollTo(new) }
                 .onChange(of: model.resultsVersion) { _, _ in proxy.scrollTo(model.selection, anchor: .top) }
