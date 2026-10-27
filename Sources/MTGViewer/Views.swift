@@ -61,8 +61,17 @@ struct MainView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Kept alive (zero height) while inspecting so the field still receives the keyboard.
             SearchBar()
-            Divider()
+                .frame(height: model.mode == .detail ? 0 : nil)
+                .clipped()
+                .opacity(model.mode == .detail ? 0 : 1)
+                .allowsHitTesting(model.mode != .detail)
+            if model.mode == .detail {
+                Color.clear.frame(height: 30)
+            } else {
+                Divider()
+            }
             if model.mode == .detail {
                 DetailView()
             } else {
@@ -593,13 +602,11 @@ struct DetailView: View {
                 .frame(minWidth: 320, maxWidth: 520)
                 .padding(.vertical, 24)
 
-                ScrollView {
-                    DetailInfo(full: f, printing: p)
-                        .frame(maxWidth: 560, alignment: .leading)
-                        .padding(.vertical, 28)
-                        .padding(.trailing, 8)
-                }
-                .frame(maxWidth: .infinity)
+                DetailInfo(full: f, printing: p)
+                    .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(.vertical, 24)
+                    .padding(.trailing, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 36)
         } else {
@@ -614,8 +621,8 @@ struct DetailInfo: View {
     let printing: Printing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(full.visibleFaces(face: model.face).enumerated()), id: \.offset) { _, f in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
@@ -630,16 +637,13 @@ struct DetailInfo: View {
                         }
                         if let l = f.loyalty { Text("Loyalty \(l)").font(.system(size: 14, weight: .semibold)) }
                         if let d = f.defense { Text("Defense \(d)").font(.system(size: 14, weight: .semibold)) }
-                        if let fl = f.flavor {
-                            Text(fl).font(.system(size: 13)).italic().foregroundStyle(.tertiary).padding(.top, 2)
-                        }
                     }
                 }
             }
 
             section("Legality") {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8, alignment: .leading)], alignment: .leading, spacing: 8) {
-                    ForEach(Formats.headline, id: \.self) { fmt in
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+                    ForEach(Formats.detailFormats, id: \.self) { fmt in
                         LegalityChip(format: fmt, status: full.status(fmt))
                     }
                 }
@@ -649,20 +653,15 @@ struct DetailInfo: View {
                 PriceBlock(printing: printing, age: model.priceAge)
             }
 
-            section("Printings · \(full.printings.count)") {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 1) {
-                            ForEach(Array(full.printings.enumerated()), id: \.offset) { i, p in
-                                PrintingRow(printing: p, selected: i == model.selectedPrintingIndex)
-                                    .id(i)
-                                    .onTapGesture { model.selectPrinting(i); model.focusSearch() }
-                            }
-                        }
-                    }
-                    .frame(height: 220)
-                    .onChange(of: model.selectedPrintingIndex) { _, i in proxy.scrollTo(i) }
-                    .onAppear { proxy.scrollTo(model.selectedPrintingIndex, anchor: .center) }
+            section("Edition") {
+                HStack(spacing: 8) {
+                    Circle().fill(Style.rarity(printing.rarity)).frame(width: 8, height: 8)
+                    Text(printing.setName).font(.system(size: 13)).lineLimit(1)
+                    Text("\(printing.setCode.uppercased()) #\(printing.collector)")
+                        .font(.system(size: 11, design: .monospaced)).foregroundStyle(.tertiary)
+                    Spacer(minLength: 4)
+                    Text("\(model.selectedPrintingIndex + 1) of \(full.printings.count)")
+                        .font(.system(size: 11)).foregroundStyle(.tertiary)
                 }
             }
 
@@ -708,28 +707,6 @@ struct PriceBlock: View {
             Text(v.usdString).font(.system(size: 20, weight: .semibold, design: .rounded))
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
-    }
-}
-
-struct PrintingRow: View {
-    let printing: Printing
-    let selected: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Circle().fill(Style.rarity(printing.rarity)).frame(width: 8, height: 8)
-            Text(printing.setName).font(.system(size: 13)).lineLimit(1)
-            Text(printing.setCode.uppercased()).font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
-            Text("#\(printing.collector)").font(.system(size: 11)).foregroundStyle(.tertiary)
-            Spacer()
-            Text(String(printing.released.prefix(4))).font(.system(size: 11)).foregroundStyle(.tertiary)
-            Text(printing.usd?.usdString ?? "—")
-                .font(.system(size: 12, design: .rounded)).foregroundStyle(.secondary)
-                .frame(width: 58, alignment: .trailing)
-        }
-        .padding(.horizontal, 10).frame(height: 30)
-        .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor.opacity(0.2) : .clear))
-        .contentShape(Rectangle())
     }
 }
 

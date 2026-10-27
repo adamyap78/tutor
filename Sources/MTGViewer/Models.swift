@@ -20,6 +20,8 @@ enum Formats {
     ]
 
     /// Formats shown in the detail view's legality grid, in order.
+    static let detailFormats = ["standard", "pioneer", "modern", "legacy", "vintage", "commander"]
+
     static let headline = [
         "standard", "pioneer", "modern", "legacy", "vintage", "commander", "pauper", "brawl",
         "historic", "timeless", "explorer", "oathbreaker",
