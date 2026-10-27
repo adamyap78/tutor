@@ -87,11 +87,13 @@ final class AppModel {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             let plain = e.modifierFlags.intersection([.command, .control, .option]).isEmpty
             guard plain, e.characters == ",", let self else { return e }
-            return MainActor.assumeIsolated {
-                guard let w = self.searchField?.window, e.window === w, w.attachedSheet == nil, self.dataState == .ready else { return e }
+            nonisolated(unsafe) let event = e
+            let handled = MainActor.assumeIsolated {
+                guard let w = self.searchField?.window, event.window === w, w.attachedSheet == nil, self.dataState == .ready else { return false }
                 self.toggleFavorite()
-                return nil
+                return true
             }
+            return handled ? nil : e
         }
         if let s = try? CardStore(path: importer.dbURL.path), s.cardCount > 0 {
             install(s)
@@ -439,6 +441,7 @@ final class AppModel {
         let normalCount = min(3000, ids.count)
         let total = ids.count + normalCount
         warmTask = Task.detached(priority: .background) { [weak self] in
+            let model = self
             if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
             var done = 0
             let chunk = 96
@@ -447,7 +450,7 @@ final class AppModel {
                 while i < list.count {
                     if Task.isCancelled { return }
                     if ProcessInfo.processInfo.isLowPowerModeEnabled {
-                        await MainActor.run { self?.warmStatus = "Image caching paused (Low Power Mode)" }
+                        await MainActor.run { model?.warmStatus = "Image caching paused (Low Power Mode)" }
                         try? await Task.sleep(nanoseconds: 30_000_000_000)
                         continue
                     }
@@ -458,11 +461,11 @@ final class AppModel {
                     i += chunk
                     done += slice.count
                     let pct = Int(Double(done) / Double(total) * 100)
-                    await MainActor.run { self?.warmStatus = "Caching images \(pct)%" }
+                    await MainActor.run { model?.warmStatus = "Caching images \(pct)%" }
                 }
             }
             if prune { ImageStore.shared.pruneOrphans(keep: Set(ids)) }
-            await MainActor.run { self?.warmStatus = nil }
+            await MainActor.run { model?.warmStatus = nil }
         }
     }
 

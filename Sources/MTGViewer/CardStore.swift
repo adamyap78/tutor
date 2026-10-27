@@ -8,7 +8,7 @@ struct SearchOutput {
 
 /// Read-only access to the card database.
 /// `search` must be called from a single queue; `row` / `full` from the main thread.
-final class CardStore {
+final class CardStore: @unchecked Sendable {
     static let schemaVersion = 2
 
     let path: String

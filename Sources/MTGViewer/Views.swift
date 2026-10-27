@@ -338,13 +338,13 @@ struct ResultGrid: View {
 
 struct FavoriteStar: View {
     let on: Bool
-    var size: CGFloat = 16
+    var size: CGFloat = 12
 
     var body: some View {
         Image(systemName: on ? "star.fill" : "star")
-            .font(.system(size: size, weight: .semibold))
-            .foregroundStyle(on ? AnyShapeStyle(LinearGradient(colors: [Color(red: 1, green: 0.84, blue: 0.3), Color(red: 0.96, green: 0.62, blue: 0.1)], startPoint: .top, endPoint: .bottom)) : AnyShapeStyle(.secondary))
-            .shadow(color: .black.opacity(on ? 0.45 : 0), radius: 2, y: 1)
+            .font(.system(size: size, weight: .medium))
+            .foregroundStyle(on ? Color.white : Color.primary.opacity(0.55))
+            .shadow(color: .black.opacity(on ? 0.5 : 0), radius: 1.5, y: 0.5)
     }
 }
 
@@ -353,13 +353,15 @@ struct FavoriteButton: View {
     let row: CardRow
 
     var body: some View {
+        let on = model.isFavorite(row)
         Button {
             model.toggleFavorite()
             model.focusSearch()
         } label: {
-            FavoriteStar(on: model.isFavorite(row), size: 14)
-                .padding(7)
-                .background(.regularMaterial, in: Circle())
+            FavoriteStar(on: on, size: 11)
+                .frame(width: 24, height: 24)
+                .background(on ? AnyShapeStyle(Color.black.opacity(0.35)) : AnyShapeStyle(.regularMaterial), in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(on ? 0.25 : 0.12), lineWidth: 0.5))
         }
         .buttonStyle(.plain)
         .help("Favourite (,)")
@@ -383,7 +385,7 @@ struct GridCell: View {
                     .padding(-2)
             )
             .overlay(alignment: .topTrailing) {
-                if model.isFavorite(row) { FavoriteStar(on: true, size: max(14, width * 0.14)).padding(width * 0.05) }
+                if model.isFavorite(row) { FavoriteStar(on: true, size: max(11, width * 0.09)).padding(width * 0.06) }
             }
             .scaleEffect(selected ? 1.02 : 1)
     }
@@ -577,10 +579,12 @@ struct CardBadges: View {
                 .help(printing.setName)
                 Spacer(minLength: 4)
                 if let usd = printing.usd ?? printing.usdFoil ?? printing.usdEtched {
+                    let finish = printing.usd != nil ? "Nonfoil" : printing.usdFoil != nil ? "Foil" : "Etched"
                     Text(usd.usdString)
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(.regularMaterial, in: Capsule())
+                        .help("\(finish) price in USD for \(printing.setName) (\(printing.setCode.uppercased()))\nSource: Scryfall bulk data, sourced from TCGplayer market prices\nSnapshot from the last import; may be out of date")
                 }
             }
             .foregroundStyle(.primary)
