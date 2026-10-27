@@ -395,7 +395,11 @@ struct CardImageView: View {
         .task(id: key) {
             guard hasImage else { return }
             let store = ImageStore.shared
-            if store.memoryImage(key) != nil { return }
+            if let hit = store.memoryImage(key) {
+                // Landed in the cache (e.g. prefetch) after this view first rendered.
+                box.set(key, hit)
+                return
+            }
             if size == .large {
                 // Paint something sharp-ish immediately while the large image loads.
                 Task {
