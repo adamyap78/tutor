@@ -6,6 +6,7 @@ macOS SwiftUI app: instant offline MTG card search over a local SQLite DB built 
 - Build app: `Scripts/build_app.sh` (outputs `dist/Tutor.app`)
 - Compile only: `swift build -c release`
 - Fetch/rebuild data: `.build/release/Tutor --import`
+- Tests: `swift test` (query parser + SQL compiler, in-memory SQLite)
 - Benchmark queries: `.build/release/Tutor --bench` (keep common queries < 10 ms)
 - Alternate data dir: `TUTOR_DATA_DIR=/path`
 

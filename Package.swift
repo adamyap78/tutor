@@ -9,7 +9,8 @@ let package = Package(
             name: "Tutor",
             path: "Sources/Tutor",
             swiftSettings: [.unsafeFlags(["-Ounchecked"], .when(configuration: .release))]
-        )
+        ),
+        .testTarget(name: "TutorTests", dependencies: ["Tutor"], path: "Tests/TutorTests"),
     ],
     swiftLanguageModes: [.v5]
 )
