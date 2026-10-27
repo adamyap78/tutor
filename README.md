@@ -18,7 +18,7 @@ Instant, offline card search for Magic: The Gathering, for macOS. Type a Scryfal
 Tutor isn't signed or notarised, so build it yourself. That takes under a minute and needs only the Xcode Command Line Tools (`xcode-select --install`), not full Xcode.
 
 ```sh
-git clone https://github.com/<you>/tutor.git
+git clone https://github.com/adamyap78/tutor.git
 cd tutor
 Scripts/build_app.sh
 open dist/Tutor.app
