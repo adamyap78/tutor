@@ -68,7 +68,6 @@ struct MainView: View {
                     HStack(spacing: 0) {
                         Group {
                             if model.count == 0 { EmptyResults() }
-                            else if model.layout == .list { ResultList() }
                             else { ResultGrid() }
                         }
                         .frame(minWidth: 320, maxWidth: .infinity)
@@ -115,17 +114,6 @@ struct SearchBar: View {
                 .buttonStyle(.plain)
                 .help("Clear (Esc)")
             }
-            Button {
-                model.toggleLayout()
-                model.focusSearch()
-            } label: {
-                Image(systemName: model.layout == .list ? "square.grid.2x2" : "list.bullet")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 26, height: 26)
-            }
-            .buttonStyle(.plain)
-            .help(model.layout == .list ? "Show image grid (⌘G)" : "Show compact list (⌘G)")
         }
         .padding(.horizontal, 18)
         .frame(height: Self.height)
@@ -223,11 +211,9 @@ struct SearchField: NSViewRepresentable {
             case #selector(NSResponder.moveDown(_:)): model.arrow(.down); return true
             // Plain left/right always navigate; Option/Cmd/Ctrl/Shift variants use other selectors and still edit text.
             case #selector(NSResponder.moveLeft(_:)):
-                if model.handlesHorizontal { model.arrow(.left); return true }
-                return false
+                model.arrow(.left); return true
             case #selector(NSResponder.moveRight(_:)):
-                if model.handlesHorizontal { model.arrow(.right); return true }
-                return false
+                model.arrow(.right); return true
             case #selector(NSResponder.insertNewline(_:)): model.enter(); return true
             case #selector(NSResponder.cancelOperation(_:)): model.escape(); return true
             case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)): model.flip(); return true
@@ -242,69 +228,6 @@ struct SearchField: NSViewRepresentable {
 }
 
 // MARK: - Results
-
-struct ResultRow: View {
-    let row: CardRow
-    let selected: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Style.rarity(row.rarity))
-                .frame(width: 3, height: 26)
-                .opacity(selected ? 1 : 0.55)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.name)
-                    .font(.system(size: 14, weight: .medium))
-                    .lineLimit(1)
-                Text(row.typeLine)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 6)
-            ManaCostView(cost: row.manaCost, size: 13)
-            Text(row.setCode.uppercased())
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .frame(width: 32, alignment: .trailing)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 46)
-        .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Color.accentColor.opacity(0.20) : .clear))
-        .contentShape(Rectangle())
-    }
-}
-
-struct ResultList: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            List {
-                ForEach(0..<model.count, id: \.self) { i in
-                    if let row = model.row(at: i) {
-                        ResultRow(row: row, selected: i == model.selection)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                            .id(i)
-                            .onTapGesture(count: 2) { model.select(i); model.enter(); model.focusSearch() }
-                            .onTapGesture { model.select(i); model.focusSearch() }
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .scrollIndicators(.hidden)
-            .scrollContentBackground(.hidden)
-            .contentMargins(.top, 34, for: .scrollContent)
-            .contentMargins(.bottom, SearchBar.clearance, for: .scrollContent)
-            .environment(\.defaultMinListRowHeight, 46)
-            .onChange(of: model.selection) { _, new in proxy.scrollTo(new) }
-            .onChange(of: model.resultsVersion) { _, _ in proxy.scrollTo(model.selection, anchor: .top) }
-        }
-    }
-}
 
 struct ResultGrid: View {
     @Environment(AppModel.self) private var model
@@ -789,7 +712,6 @@ struct FooterBar: View {
                 Hint(key: "↑↓", label: "Navigate")
                 Hint(key: "⏎", label: "Inspect")
                 Hint(key: "⌘C", label: "Copy name")
-                Hint(key: "⌘G", label: model.layout == .list ? "Grid" : "List")
                 Hint(key: "⌘I", label: model.showText ? "Hide text" : "Card text")
                 Hint(key: "⎋", label: "Clear")
             }

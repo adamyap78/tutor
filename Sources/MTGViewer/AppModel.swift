@@ -2,7 +2,6 @@ import AppKit
 import Observation
 import SwiftUI
 
-enum LayoutMode: String { case list, grid }
 enum ViewMode { case browse, detail }
 enum DataState { case loading, needsData, ready }
 enum Arrow { case up, down, left, right }
@@ -39,7 +38,6 @@ final class AppModel {
     private(set) var printingIndex: Int?
     var gridColumns = 4
     private(set) var showText = UserDefaults.standard.bool(forKey: "showText")
-    private(set) var layout: LayoutMode = LayoutMode(rawValue: UserDefaults.standard.string(forKey: "layout") ?? "") ?? .list
 
     private(set) var dataState: DataState = .loading
     private(set) var progress: ImportProgress?
@@ -305,8 +303,6 @@ final class AppModel {
         return f.localizedString(for: d, relativeTo: Date())
     }
 
-    var handlesHorizontal: Bool { mode == .detail || layout == .grid }
-
     // MARK: Navigation
 
     func select(_ i: Int, fromUser: Bool = true) {
@@ -328,19 +324,16 @@ final class AppModel {
             }
             return
         }
-        switch (layout, a) {
-        case (.list, .up): select(selection - 1)
-        case (.list, .down): select(selection + 1)
-        case (.grid, .up): select(selection - gridColumns)
-        case (.grid, .down): select(selection + gridColumns)
-        case (.grid, .left): select(selection - 1)
-        case (.grid, .right): select(selection + 1)
-        default: break
+        switch a {
+        case .up: select(selection - gridColumns)
+        case .down: select(selection + gridColumns)
+        case .left: select(selection - 1)
+        case .right: select(selection + 1)
         }
     }
 
     func page(_ dir: Int) {
-        select(selection + dir * (layout == .grid ? gridColumns * 3 : 10))
+        select(selection + dir * gridColumns * 3)
     }
 
     func first() { select(0) }
@@ -377,12 +370,6 @@ final class AppModel {
         UserDefaults.standard.set(showText, forKey: "showText")
     }
 
-    func toggleLayout() {
-        layout = layout == .list ? .grid : .list
-        UserDefaults.standard.set(layout.rawValue, forKey: "layout")
-        resultsVersion += 1
-    }
-
     func focusSearch(selectAll: Bool = false) {
         guard let f = searchField, let w = f.window else { return }
         if w.firstResponder !== f.currentEditor() {
@@ -397,7 +384,7 @@ final class AppModel {
         prefetchTask?.cancel()
         let sel = selection
         let d = lastDelta
-        let size: ImageSize = layout == .grid ? .small : .large
+        let size: ImageSize = .small
         prefetchTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 40_000_000)
             guard !Task.isCancelled else { return }
