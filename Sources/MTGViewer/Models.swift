@@ -126,6 +126,7 @@ enum CardFlag: Int, CaseIterable {
 
 struct CardRow: Identifiable, Hashable {
     let id: Int64
+    let oracleID: String
     let name: String
     let manaCost: String
     let typeLine: String

@@ -56,12 +56,15 @@ final class AppModel {
     private(set) var prefs = Preferences.load()
     private(set) var setCatalog: [SetInfo] = []
     private(set) var hiddenCount = 0
+    private(set) var favorites = Set(UserDefaults.standard.stringArray(forKey: "favorites") ?? [])
 
     // MARK: Internals
     @ObservationIgnored private var store: CardStore?
     @ObservationIgnored private let prefsQueue = DispatchQueue(label: "mtg.prefs", qos: .userInitiated)
     @ObservationIgnored private var prefsTask: Task<Void, Never>?
     @ObservationIgnored private var keepID: Int64?
+    @ObservationIgnored private var keepIndex: Int?
+    @ObservationIgnored private var keyMonitor: Any?
     @ObservationIgnored private var importer = Importer(dataDir: Importer.defaultDataDir())
     @ObservationIgnored private var rowCache: [Int64: CardRow] = [:]
     @ObservationIgnored private var fullCache: CardFull?
@@ -81,6 +84,15 @@ final class AppModel {
             MainActor.assumeIsolated { self?.focusSearch() }
         }
         ImageStore.shared.trimDisk()
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            let plain = e.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            guard plain, e.characters == ",", let self else { return e }
+            return MainActor.assumeIsolated {
+                guard let w = self.searchField?.window, e.window === w, w.attachedSheet == nil, self.dataState == .ready else { return e }
+                self.toggleFavorite()
+                return nil
+            }
+        }
         if let s = try? CardStore(path: importer.dbURL.path), s.cardCount > 0 {
             install(s)
             let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
@@ -98,6 +110,7 @@ final class AppModel {
 
     private func install(_ s: CardStore) {
         store = s
+        s.setFavorites(oracleIDs: favorites)
         cardTotal = s.cardCount
         if let d = s.meta("bulk_updated_at") {
             bulkDate = ISO8601DateFormatter.withFractional.date(from: d) ?? ISO8601DateFormatter().date(from: d)
@@ -249,8 +262,9 @@ final class AppModel {
         warnings = out.warnings
         searchMS = out.ms
         if rowCache.count > 4000 { rowCache.removeAll() }
-        selection = keepID.flatMap { out.ids.firstIndex(of: $0) } ?? 0
+        selection = keepID.flatMap { out.ids.firstIndex(of: $0) } ?? min(keepIndex ?? 0, max(0, out.ids.count - 1))
         keepID = nil
+        keepIndex = nil
         lastDelta = 1
         resultsVersion += 1
         selectionReset()
@@ -363,6 +377,24 @@ final class AppModel {
     func flip() {
         guard let f = full, f.row.hasBack else { return }
         face = face == 0 ? 1 : 0
+    }
+
+    func isFavorite(_ row: CardRow) -> Bool { favorites.contains(row.oracleID) }
+
+    func toggleFavorite() {
+        guard let c = current, let store else { return }
+        if favorites.contains(c.oracleID) {
+            favorites.remove(c.oracleID)
+            keepIndex = selection
+            flash("Removed from favourites")
+        } else {
+            favorites.insert(c.oracleID)
+            flash("Added to favourites")
+        }
+        UserDefaults.standard.set(Array(favorites), forKey: "favorites")
+        store.setFavorites(oracleIDs: favorites)
+        keepID = c.id
+        runSearch()
     }
 
     func toggleText() {

@@ -336,7 +336,39 @@ struct ResultGrid: View {
     }
 }
 
+struct FavoriteStar: View {
+    let on: Bool
+    var size: CGFloat = 16
+
+    var body: some View {
+        Image(systemName: on ? "star.fill" : "star")
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(on ? AnyShapeStyle(LinearGradient(colors: [Color(red: 1, green: 0.84, blue: 0.3), Color(red: 0.96, green: 0.62, blue: 0.1)], startPoint: .top, endPoint: .bottom)) : AnyShapeStyle(.secondary))
+            .shadow(color: .black.opacity(on ? 0.45 : 0), radius: 2, y: 1)
+    }
+}
+
+struct FavoriteButton: View {
+    @Environment(AppModel.self) private var model
+    let row: CardRow
+
+    var body: some View {
+        Button {
+            model.toggleFavorite()
+            model.focusSearch()
+        } label: {
+            FavoriteStar(on: model.isFavorite(row), size: 14)
+                .padding(7)
+                .background(.regularMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Favourite (,)")
+        .padding(8)
+    }
+}
+
 struct GridCell: View {
+    @Environment(AppModel.self) private var model
     let row: CardRow
     let selected: Bool
     let width: CGFloat
@@ -350,6 +382,9 @@ struct GridCell: View {
                     .strokeBorder(Color.accentColor, lineWidth: selected ? 3 : 0)
                     .padding(-2)
             )
+            .overlay(alignment: .topTrailing) {
+                if model.isFavorite(row) { FavoriteStar(on: true, size: max(14, width * 0.14)).padding(width * 0.05) }
+            }
             .scaleEffect(selected ? 1.02 : 1)
     }
 }
@@ -501,6 +536,7 @@ struct PreviewPane: View {
                               text: face?.oracleText ?? "",
                               textOverlay: model.showText ? f : nil)
                     .overlay(alignment: .bottom) { CardBadges(full: f, printing: p) }
+                    .overlay(alignment: .topLeading) { FavoriteButton(row: f.row) }
                     .overlay(alignment: .topTrailing) {
                         if f.row.hasBack {
                             Text("⇥ flip")
@@ -623,6 +659,7 @@ struct DetailView: View {
                               subtitle: f.visibleFaces(face: model.face).first?.typeLine ?? "",
                               text: f.visibleFaces(face: model.face).first?.oracleText ?? "")
                     .overlay(alignment: .bottom) { CardBadges(full: f, printing: p) }
+                    .overlay(alignment: .topLeading) { FavoriteButton(row: f.row) }
                     .overlay(alignment: .topTrailing) {
                         if f.row.hasBack {
                             Text("⇥ flip")

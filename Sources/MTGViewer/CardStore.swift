@@ -18,6 +18,7 @@ final class CardStore {
     private let adminConn: SQLiteConn
     private let overlayLock = NSLock()
     private var _overlay: Overlay?
+    private var _favorites = Set<Int64>()
     private let rowStmt: Statement
     private let fullStmt: Statement
     private let printingsStmt: Statement
@@ -34,7 +35,7 @@ final class CardStore {
             throw DBError(message: "Database schema is out of date")
         }
         rowStmt = try lookupConn.prepare(
-            "SELECT id,name,mana_cost,type_line,set_code,rarity,scry_id,has_image,flags FROM cards WHERE id=?")
+            "SELECT id,name,mana_cost,type_line,set_code,rarity,scry_id,has_image,flags,oracle_id FROM cards WHERE id=?")
         fullStmt = try lookupConn.prepare(
             "SELECT c.oracle_id,c.legal,c.restricted,c.banned,c.edhrec,c.printing_id,d.json FROM cards c JOIN detail d ON d.card_id=c.id WHERE c.id=?")
         printingsStmt = try lookupConn.prepare(
@@ -48,6 +49,24 @@ final class CardStore {
 
     func setOverlay(_ o: Overlay?) {
         overlayLock.lock(); _overlay = o; overlayLock.unlock()
+    }
+
+    /// Resolves favourite oracle ids to card ids (call from the main thread, like `row`).
+    func setFavorites(oracleIDs: Set<String>) {
+        var ids = Set<Int64>()
+        if !oracleIDs.isEmpty, let st = try? lookupConn.prepare("SELECT id FROM cards WHERE oracle_id=?") {
+            for o in oracleIDs {
+                st.reset()
+                st.bind(1, .text(o))
+                while st.step() { ids.insert(st.int64(0)) }
+            }
+        }
+        overlayLock.lock(); _favorites = ids; overlayLock.unlock()
+    }
+
+    private var favorites: Set<Int64> {
+        overlayLock.lock(); defer { overlayLock.unlock() }
+        return _favorites
     }
 
     /// Printing ids of every visible card that has artwork, most popular first (for cache warming).
@@ -134,6 +153,12 @@ final class CardStore {
             warnings.append("Query error: \(error.localizedDescription)")
         }
         if let hidden = overlay?.hidden, !hidden.isEmpty { ids.removeAll { hidden.contains($0) } }
+        let favs = favorites
+        if !favs.isEmpty {
+            // Favourites lead the results; with no query they are the whole grid.
+            let (mine, rest) = ids.reduce(into: ([Int64](), [Int64]())) { if favs.contains($1) { $0.0.append($1) } else { $0.1.append($1) } }
+            if compiled.isBlank { if !mine.isEmpty { ids = mine } } else { ids = mine + rest }
+        }
         let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1_000_000
         return SearchOutput(ids: ids, warnings: warnings, ms: ms)
     }
@@ -145,7 +170,7 @@ final class CardStore {
         let flags = rowStmt.int(8)
         let rep = overlay?.reps[id]
         return CardRow(
-            id: rowStmt.int64(0), name: rowStmt.text(1), manaCost: rowStmt.text(2),
+            id: rowStmt.int64(0), oracleID: rowStmt.text(9), name: rowStmt.text(1), manaCost: rowStmt.text(2),
             typeLine: rowStmt.text(3), setCode: rep?.setCode ?? rowStmt.text(4), rarity: rep?.rarity ?? rowStmt.int(5),
             scryID: rep?.scryID ?? rowStmt.text(6), hasImage: rep?.hasImage ?? (rowStmt.int(7) != 0),
             hasBack: flags & (1 << CardFlag.dfc.rawValue) != 0)
