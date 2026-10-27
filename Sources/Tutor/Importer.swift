@@ -24,7 +24,7 @@ struct BulkInfo {
 }
 
 final class Importer {
-    static let userAgent = "MTGViewer/1.0"
+    static let userAgent = "Tutor/1.0"
     nonisolated(unsafe) private static var savedResumeData: Data?
 
     let dataDir: URL
@@ -33,11 +33,11 @@ final class Importer {
     init(dataDir: URL) { self.dataDir = dataDir }
 
     static func defaultDataDir() -> URL {
-        if let override = ProcessInfo.processInfo.environment["MTG_DATA_DIR"] {
+        if let override = ProcessInfo.processInfo.environment["TUTOR_DATA_DIR"] {
             return URL(fileURLWithPath: override, isDirectory: true)
         }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("MTGViewer", isDirectory: true)
+        return base.appendingPathComponent("Tutor", isDirectory: true)
     }
 
     // MARK: Entry point

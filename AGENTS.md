@@ -3,13 +3,13 @@
 macOS SwiftUI app: instant offline MTG card search over a local SQLite DB built from Scryfall bulk data.
 
 ## Commands
-- Build app: `Scripts/build_app.sh` (outputs `dist/MTG Viewer.app`)
+- Build app: `Scripts/build_app.sh` (outputs `dist/Tutor.app`)
 - Compile only: `swift build -c release`
-- Fetch/rebuild data: `.build/release/MTGViewer --import`
-- Benchmark queries: `.build/release/MTGViewer --bench` (keep common queries < 10 ms)
-- Alternate data dir: `MTG_DATA_DIR=/path`
+- Fetch/rebuild data: `.build/release/Tutor --import`
+- Benchmark queries: `.build/release/Tutor --bench` (keep common queries < 10 ms)
+- Alternate data dir: `TUTOR_DATA_DIR=/path`
 
-## Layout (`Sources/MTGViewer/`)
+## Layout (`Sources/Tutor/`)
 - `Query.swift` Scryfall syntax → SQL · `CardStore.swift` read-only DB access · `Importer.swift` download, parse, build, atomic swap
 - `AppModel.swift` all UI state · `Views.swift`, `ManaViews.swift` UI · `ImageStore.swift` image cache + warmer · `CLI.swift` dev commands
 

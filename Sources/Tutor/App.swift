@@ -13,7 +13,7 @@ struct MTGApp: App {
     private let model = AppModel()
 
     var body: some Scene {
-        WindowGroup("MTG Viewer") {
+        WindowGroup("Tutor") {
             RootView()
                 .environment(model)
                 .frame(minWidth: 900, minHeight: 510)

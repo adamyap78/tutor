@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "MTGViewer",
+    name: "Tutor",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "MTGViewer",
-            path: "Sources/MTGViewer",
+            name: "Tutor",
+            path: "Sources/Tutor",
             swiftSettings: [.unsafeFlags(["-Ounchecked"], .when(configuration: .release))]
         )
     ],

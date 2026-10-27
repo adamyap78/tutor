@@ -1,6 +1,6 @@
 import Foundation
 
-/// Developer entry points: `MTGViewer --import`, `--bench`. Returns true when handled.
+/// Developer entry points: `Tutor --import`, `--bench`. Returns true when handled.
 enum CLI {
     static func handle(_ args: [String]) -> Bool {
         if args.contains("--import") { runImport(force: true); return true }

@@ -59,8 +59,8 @@ final class ImageStore: @unchecked Sendable {
 
     init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        root = caches.appendingPathComponent("MTGViewer/images", isDirectory: true)
-        pinnedRoot = caches.appendingPathComponent("MTGViewer/pinned", isDirectory: true)
+        root = caches.appendingPathComponent("Tutor/images", isDirectory: true)
+        pinnedRoot = caches.appendingPathComponent("Tutor/pinned", isDirectory: true)
         let cfg = URLSessionConfiguration.default
         cfg.urlCache = nil
         cfg.timeoutIntervalForRequest = 20
