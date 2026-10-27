@@ -12,7 +12,7 @@ macOS SwiftUI app: instant offline MTG card search over a local SQLite DB built 
 
 ## Layout (`Sources/Tutor/`)
 - `Query.swift` Scryfall syntax → SQL · `CardStore.swift` read-only DB access · `Importer.swift` download, parse, build, atomic swap
-- `AppModel.swift` all UI state · `Views.swift`, `ManaViews.swift` UI · `ImageStore.swift` image cache + warmer · `CLI.swift` dev commands
+- `AppModel.swift` all UI state (`AppModel+Clipboard.swift` copy/link actions) · `Views/` SwiftUI views, one file per screen area · `ImageStore.swift` image cache + warmer · `Locked.swift` lock-guarded counters · `CLI.swift` dev commands
 
 ## Rules
 - Speed is the product: no network or blocking work on the search/selection path; DB reads stay off the main thread except `row`/`full` lookups.

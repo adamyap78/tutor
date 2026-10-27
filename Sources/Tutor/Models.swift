@@ -260,3 +260,11 @@ enum TextNorm {
 extension Double {
     var usdString: String { String(format: "$%.2f", self) }
 }
+
+extension ISO8601DateFormatter {
+    static let withFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+}

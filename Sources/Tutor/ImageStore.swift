@@ -35,6 +35,12 @@ private actor Inflight {
 /// Memory + on-disk cache for card images. Images are fetched lazily from Scryfall's CDN
 /// (no rate limit) and never block search or navigation.
 final class ImageStore: @unchecked Sendable {
+    private static let requestTimeout: TimeInterval = 20
+    /// Scryfall's image CDN has no rate limit, so keep many requests in flight for fast scrolling.
+    private static let maxConnectionsPerHost = 18
+    /// Cached files are re-touched (for LRU pruning) at most this often.
+    private static let touchInterval: TimeInterval = 6 * 3600
+
     static let shared = ImageStore()
 
     enum Priority { case visible, background }
@@ -63,8 +69,8 @@ final class ImageStore: @unchecked Sendable {
         pinnedRoot = caches.appendingPathComponent("Tutor/pinned", isDirectory: true)
         let cfg = URLSessionConfiguration.default
         cfg.urlCache = nil
-        cfg.timeoutIntervalForRequest = 20
-        cfg.httpMaximumConnectionsPerHost = 18
+        cfg.timeoutIntervalForRequest = Self.requestTimeout
+        cfg.httpMaximumConnectionsPerHost = Self.maxConnectionsPerHost
         cfg.httpAdditionalHeaders = ["User-Agent": Importer.userAgent, "Accept": "image/jpeg,image/*;q=0.8"]
         session = URLSession(configuration: cfg)
         mem.totalCostLimit = 400 * 1024 * 1024
@@ -203,7 +209,7 @@ final class ImageStore: @unchecked Sendable {
 
     private func touch(_ url: URL) {
         let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-        if let d = vals?.contentModificationDate, Date().timeIntervalSince(d) < 6 * 3600 { return }
+        if let d = vals?.contentModificationDate, Date().timeIntervalSince(d) < Self.touchInterval { return }
         try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
     }
 

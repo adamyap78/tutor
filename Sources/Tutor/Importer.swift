@@ -25,6 +25,11 @@ struct BulkInfo {
 
 final class Importer {
     static let userAgent = "Tutor/1.0"
+    /// Rough size of Scryfall's default-cards bulk file, used to scale progress before the real total is known.
+    static let estimatedBulkLines = 120_000
+    /// A database or bulk file with fewer cards than this is treated as truncated or corrupt.
+    static let minimumPlausibleCards = 20_000
+    static let requestTimeout: TimeInterval = 30
     nonisolated(unsafe) private static var savedResumeData: Data?
 
     let dataDir: URL
@@ -80,7 +85,7 @@ final class Importer {
         var r = URLRequest(url: url)
         r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         r.setValue("application/json;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        r.timeoutInterval = 30
+        r.timeoutInterval = Self.requestTimeout
         return r
     }
 
@@ -199,7 +204,7 @@ final class Importer {
         flush()
         proc.waitUntilExit()
         guard proc.terminationStatus == 0 else { throw ImportError(message: "The downloaded file was corrupt. Please try again.") }
-        guard aggs.count > 20_000 else { throw ImportError(message: "The card data looked incomplete (\(aggs.count) cards).") }
+        guard aggs.count > Self.minimumPlausibleCards else { throw ImportError(message: "The card data looked incomplete (\(aggs.count) cards).") }
 
         // 2. Write the database.
         progress(.init(phase: .building, fraction: 0, detail: "Building search index…"))
@@ -494,7 +499,7 @@ final class FileDownloader: NSObject, URLSessionDownloadDelegate {
 
     func start(request: URLRequest, resumeData: Data?) async throws {
         let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 30
+        cfg.timeoutIntervalForRequest = Importer.requestTimeout
         cfg.waitsForConnectivity = false
         let s = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
         session = s

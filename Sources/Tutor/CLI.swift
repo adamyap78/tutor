@@ -1,33 +1,31 @@
 import Foundation
 
-/// Developer entry points: `Tutor --import`, `--bench`. Returns true when handled.
+/// Developer entry points: `Tutor --import`, `--bench`.
 enum CLI {
-    static func handle(_ args: [String]) -> Bool {
-        if args.contains("--import") { runImport(force: true); return true }
-        if args.contains("--bench") { bench(); return true }
-        return false
+    static func isCommand(_ args: [String]) -> Bool {
+        args.contains("--import") || args.contains("--bench")
     }
 
-    static func runImport(force: Bool) {
+    static func run(_ args: [String]) async {
+        if args.contains("--import") { await runImport(force: true) }
+        if args.contains("--bench") { bench() }
+    }
+
+    static func runImport(force: Bool) async {
         let imp = Importer(dataDir: Importer.defaultDataDir())
-        let sem = DispatchSemaphore(value: 0)
-        Task {
-            let t0 = Date()
-            var lastPrint = Date.distantPast
-            do {
-                let url = try await imp.run(force: force, installedBulkDate: nil, estimatedLines: 112_000) { p in
-                    if Date().timeIntervalSince(lastPrint) > 1 {
-                        lastPrint = Date()
-                        print(String(format: "%3.0f%%  %@", p.fraction * 100, p.detail))
-                    }
+        let t0 = Date()
+        var lastPrint = Date.distantPast
+        do {
+            let url = try await imp.run(force: force, installedBulkDate: nil, estimatedLines: Importer.estimatedBulkLines) { p in
+                if Date().timeIntervalSince(lastPrint) > 1 {
+                    lastPrint = Date()
+                    print(String(format: "%3.0f%%  %@", p.fraction * 100, p.detail))
                 }
-                print("Installed \(url?.path ?? "-") in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
-            } catch {
-                print("Import failed: \(error.localizedDescription)")
             }
-            sem.signal()
+            print("Installed \(url?.path ?? "-") in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s")
+        } catch {
+            print("Import failed: \(error.localizedDescription)")
         }
-        sem.wait()
     }
 
     static func bench() {

@@ -6,22 +6,15 @@ enum ViewMode { case browse, detail }
 enum DataState { case loading, needsData, ready }
 enum Arrow { case up, down, left, right }
 
-private final class Counter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var v = 0
-    func next() -> Int { lock.lock(); defer { lock.unlock() }; v += 1; return v }
-    var value: Int { lock.lock(); defer { lock.unlock() }; return v }
-}
-
-private final class Throttle: @unchecked Sendable {
-    private let lock = NSLock()
-    private var last = Date.distantPast
-    func ready(force: Bool) -> Bool {
-        lock.lock(); defer { lock.unlock() }
-        let now = Date()
-        if force || now.timeIntervalSince(last) > 0.08 { last = now; return true }
-        return false
-    }
+/// Delays and thresholds that shape how the UI feels, named so they can be tuned in one place.
+private enum Tuning {
+    static let prefsDebounce: Duration = .milliseconds(120)
+    static let priceRefreshDwell: Duration = .milliseconds(300)
+    static let prefetchDelay: Duration = .milliseconds(40)
+    static let lowPowerRecheck: Duration = .seconds(30)
+    static let toastDuration: Duration = .milliseconds(2200)
+    /// A live price fetched less than this long ago is reused instead of re-fetched.
+    static let livePriceMaxAge: TimeInterval = 15 * 60
 }
 
 @MainActor @Observable
@@ -156,7 +149,7 @@ final class AppModel {
         let p = prefs
         prefsTask?.cancel()
         prefsTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            try? await Task.sleep(for: Tuning.prefsDebounce)
             guard !Task.isCancelled else { return }
             let overlay = await withCheckedContinuation { (c: CheckedContinuation<Overlay?, Never>) in
                 prefsQueue.async { c.resume(returning: store.computeOverlay(p)) }
@@ -204,7 +197,7 @@ final class AppModel {
         if dataState == .ready { updateStatus = "Checking for updates…" }
         let throttle = Throttle()
         let installed = store?.meta("bulk_updated_at")
-        let estimate = Int(store?.meta("printings") ?? "") ?? 120_000
+        let estimate = Int(store?.meta("printings") ?? "") ?? Importer.estimatedBulkLines
         let firstRun = dataState != .ready
 
         Task { @MainActor in
@@ -225,7 +218,7 @@ final class AppModel {
                 UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastUpdateCheck")
                 if let url {
                     let s = try CardStore(path: url.path)
-                    guard s.cardCount > 20_000 else { throw ImportError(message: "The updated database was incomplete.") }
+                    guard s.cardCount > Importer.minimumPlausibleCards else { throw ImportError(message: "The updated database was incomplete.") }
                     install(s)
                     selectionReset()
                     flash(firstRun ? "Card database ready" : "Card data updated")
@@ -339,9 +332,9 @@ final class AppModel {
     private func schedulePriceRefresh() {
         priceTask?.cancel()
         priceTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(for: Tuning.priceRefreshDwell)
             guard !Task.isCancelled, let p = printing else { return }
-            if let lp = livePrices[p.scryID], Date().timeIntervalSince(lp.fetched) < 15 * 60 { return }
+            if let lp = livePrices[p.scryID], Date().timeIntervalSince(lp.fetched) < Tuning.livePriceMaxAge { return }
             guard let lp = await LivePrice.fetch(scryID: p.scryID) else { return }
             if livePrices.count > 500 { livePrices.removeAll() }
             livePrices[p.scryID] = lp
@@ -457,7 +450,7 @@ final class AppModel {
         let d = lastDelta
         let size: ImageSize = .small
         prefetchTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 40_000_000)
+            try? await Task.sleep(for: Tuning.prefetchDelay)
             guard !Task.isCancelled else { return }
             for off in [d, 2 * d, -d, 3 * d, 4 * d] {
                 guard let r = row(at: sel + off), r.hasImage else { continue }
@@ -488,7 +481,7 @@ final class AppModel {
                     if Task.isCancelled { return }
                     if ProcessInfo.processInfo.isLowPowerModeEnabled {
                         await MainActor.run { model?.warmStatus = "Image caching paused (Low Power Mode)" }
-                        try? await Task.sleep(nanoseconds: 30_000_000_000)
+                        try? await Task.sleep(for: Tuning.lowPowerRecheck)
                         continue
                     }
                     let slice = list[i..<min(i + chunk, list.count)]
@@ -518,74 +511,12 @@ final class AppModel {
         ImageStore.shared.trimDisk()
     }
 
-    // MARK: Clipboard & links
-
-    func copyOrName() {
-        if let tv = NSApp.keyWindow?.firstResponder as? NSTextView, tv.selectedRange().length > 0 {
-            tv.copy(nil)
-        } else {
-            copyName()
-        }
-    }
-
-    func copyName() {
-        guard let c = current else { return }
-        put(c.name)
-        flash("Copied “\(c.name)”")
-    }
-
-    func copyDetails() {
-        guard let f = full, let p = printing else { return }
-        var lines: [String] = []
-        for face in f.faces {
-            lines.append(face.manaCost.isEmpty ? face.name : "\(face.name)  \(face.manaCost)")
-            lines.append(face.typeLine)
-            if !face.oracleText.isEmpty { lines.append(face.oracleText) }
-            if let pt = face.powerToughness { lines.append(pt) }
-            if let l = face.loyalty { lines.append("Loyalty: \(l)") }
-            if let d = face.defense { lines.append("Defense: \(d)") }
-            lines.append("")
-        }
-        lines.append("\(p.setName) (\(p.setCode.uppercased())) #\(p.collector) · \(Rarity.names[p.rarity].capitalized)")
-        lines.append("Modern: \(f.status("modern").label)")
-        if let usd = p.usd { lines.append("USD \(usd.usdString)") }
-        if let url = scryfallURL { lines.append(url.absoluteString) }
-        put(lines.joined(separator: "\n"))
-        flash("Copied card details")
-    }
-
-    var scryfallURL: URL? {
-        guard let p = printing else { return nil }
-        var c = URLComponents()
-        c.scheme = "https"
-        c.host = "scryfall.com"
-        c.path = "/card/\(p.setCode)/\(p.collector)"
-        return c.url
-    }
-
-    func openScryfall() {
-        if let u = scryfallURL { NSWorkspace.shared.open(u) }
-    }
-
-    private func put(_ s: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(s, forType: .string)
-    }
-
     func flash(_ s: String) {
         toast = s
         toastTask?.cancel()
         toastTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            try? await Task.sleep(for: Tuning.toastDuration)
             if !Task.isCancelled { toast = nil }
         }
     }
-}
-
-extension ISO8601DateFormatter {
-    static let withFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
 }
